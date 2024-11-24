@@ -154,32 +154,32 @@ def format_data(data: list[pd.DataFrame]) -> pd.DataFrame:
 
 def remove_first_year():
     """
-    Remove the first year of data since it has missing values
+    TODO: Remove the first year of data since it has missing values
     """
     return
 
 def apply_sliding_window():
     """
-    Reduce the size of the time series by applying a sliding window
+    TODO: Turn the time series into shorter time series that can be used as a feature
     """
     return
 
 def z_normalize():
     """
-    z normalize the given time series
+    TODO: z normalize the given time series
     """
     return
 
 def split_train_and_test():
     """
-    Split the data into a training set and a test set. This test set should not be used
+    TODO: Split the data into a training set and a test set. This test set should not be used
     for anything but the final benchmark of our project
     """
     return
 
 def calculate_labels():
     """
-    Calculate the peak value and peak position labels of the training part of the dataset
+    TODO: Calculate the peak value and peak position labels of the training part of the dataset
     """
     return
 
