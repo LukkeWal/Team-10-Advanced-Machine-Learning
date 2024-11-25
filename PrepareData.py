@@ -79,7 +79,7 @@ def change_interval_to_one_day(data: list[pd.DataFrame]) -> list[pd.DataFrame]:
     print(f"Summing measurements to 1 day intervals... DONE")
     return result
         
-def format_data(data: list[pd.DataFrame]) -> pd.DataFrame:
+def format_data(data: list[pd.DataFrame], set_missing_as_NA=True) -> pd.DataFrame:
     """
     Turn the list of dataframes into a single dataframe where every row represents a household
     and every column a day, a cell contains a households summed measurements on a specific day
@@ -127,7 +127,10 @@ def format_data(data: list[pd.DataFrame]) -> pd.DataFrame:
             meter_data = data[meter_index]
             if meter_progress == 0: # The start date of this meter has not been reached yet, check if we have reached it now
                 if meter_data.iloc[0]["DATE"] == date: # we have reached the start date of this meter
-                    column.append(meter_data.iloc[0]["SUM_MEASUREMENTS"])
+                    if set_missing_as_NA == True and meter_data.iloc[0]["AMOUNT_OF_MEASUREMENTS"] < 96:
+                        column.append(None)
+                    else:
+                        column.append(meter_data.iloc[0]["SUM_MEASUREMENTS"])
                     meter_progresses[meter_index] += 1
                 else: # We have not reached the start date of this meter, add None
                     column.append(None)
@@ -135,7 +138,10 @@ def format_data(data: list[pd.DataFrame]) -> pd.DataFrame:
                 column.append(None)
             else: # date is in the range of this meter, add datapoint to matrix
                 if(meter_progress < len(meter_data)):
-                    column.append(meter_data.iloc[meter_progress]["SUM_MEASUREMENTS"])
+                    if set_missing_as_NA == True and meter_data.iloc[0]["AMOUNT_OF_MEASUREMENTS"] < 96:
+                        column.append(None)
+                    else:
+                        column.append(meter_data.iloc[meter_progress]["SUM_MEASUREMENTS"])
                     meter_progresses[meter_index] += 1
                 else:
                     column.append(None)
