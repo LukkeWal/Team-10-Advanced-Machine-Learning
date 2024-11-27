@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 """
 Prepares the data from https://datadryad.org/stash/dataset/doi:10.5061/dryad.m0cfxpp2c (22-11-2024) 
 to be used for machine learning purposes. It requires the data from the before mentioned link to be 
-unzipped, and the LADPU folder which contains the csv files should be placed in the same folder as this file
+unzipped, and the folder which contains the csv files should be placed in the same folder as this file
 """
 
 def string_to_datetime(time: str) -> datetime:
@@ -40,10 +40,28 @@ def read_data(directory="LADPU") -> list[pd.DataFrame]:
     print (f"reading data... DONE")
     return result
 
+def load_precomputed_data(filename="time_series_matrix.csv") -> pd.DataFrame:
+    """
+    Load the data from the precomputed csv file if available
+    """
+    data = pd.read_csv(filename)
+    # read csv dumps everything into strings, we convert it back to numeric/datetime values that we can work with
+    # we starty by turning the column names into datetime objects
+    data.columns = pd.to_datetime(data.columns)
+    # then we convert the cells back into tubple with a float and an int
+    for date in data:
+        date_data = data[date]
+        for i in range(len(date_data)):
+            string = data[date].iloc[i]
+            string = string.strip("(").strip(")").split(", ")
+            string[0] = float(string[0])
+            string[1] = int(string[1])
+            data[date].iloc[i] = (string[0], string[1])
+    return data
+
 def change_interval_to_one_day(data: list[pd.DataFrame]) -> list[pd.DataFrame]:
     """
-    Given the original data, transform the intervals from 15 minutes to 1 day intervals.
-    Saves the sum of all intervals in a day, the amount of intervals in that day and the date of the day
+    Transform the intervals from 15 minutes to 1-day intervals using Pandas groupby.
     """
     result = []
     total_meter_num = len(data)
@@ -51,106 +69,54 @@ def change_interval_to_one_day(data: list[pd.DataFrame]) -> list[pd.DataFrame]:
     for meter_data in data:
         current_meter_num += 1
         print(f"Summing measurements to 1 day intervals... {current_meter_num}/{total_meter_num}", end="\r")
-        if(len(meter_data) <= 1): # some meters do not have any data, we skip these meters
+        if len(meter_data) <= 1:  # Skip empty meters
             continue
-        time_series_in_days = []
-        # we start with the first measurement of tht sis meter
-        current_date = string_to_datetime(meter_data.iloc[0]["INTERVAL_TIME"]).date()
-        single_day_measurements = [meter_data.iloc[0]["INTERVAL_READ"]]
-        # since we use the first measurement as a starting point we start checking from the second measurement onwards
-        for index in range(1, len(meter_data)):
-            # as long as the date does not change we keep appending the readings to total day measurements
-            if current_date == string_to_datetime(meter_data.iloc[index]["INTERVAL_TIME"]).date():
-                single_day_measurements.append(meter_data.iloc[index]["INTERVAL_READ"])
-            # When the date changes save the sum of the previous day measurements and start with the next day
-            else:
-                time_series_in_days.append([sum(single_day_measurements), current_date, len(single_day_measurements)])
-                # Add None values for any days that may have been skipped
-                amount_of_jumped_days = string_to_datetime(meter_data.iloc[index]["INTERVAL_TIME"]).date() - current_date
-                amount_of_jumped_days = amount_of_jumped_days.days - 1
-                for i in range(amount_of_jumped_days):
-                    time_series_in_days.append([None, current_date + timedelta(days=i), 0])
-                # Update the single day measurements and current_date to start working on the next day
-                single_day_measurements = [meter_data.iloc[index]["INTERVAL_READ"]]
-                current_date = string_to_datetime(meter_data.iloc[index]["INTERVAL_TIME"]).date()
-        # After completing a meter we save the last day and add this meters dataframe to results
-        time_series_in_days.append([sum(single_day_measurements), current_date, len(single_day_measurements)])
-        result.append(pd.DataFrame(time_series_in_days, columns=["SUM_MEASUREMENTS", "DATE", "AMOUNT_OF_MEASUREMENTS"]))
+        
+        # Ensure INTERVAL_TIME is a datetime object
+        meter_data["INTERVAL_TIME"] = meter_data["INTERVAL_TIME"].apply(string_to_datetime)
+        meter_data["DATE"] = meter_data["INTERVAL_TIME"].dt.date  # Extract date
+
+        # Aggregate by DATE: sum measurements and count occurrences
+        daily_data = meter_data.groupby("DATE").agg(
+            SUM_MEASUREMENTS=("INTERVAL_READ", "sum"),
+            AMOUNT_OF_MEASUREMENTS=("INTERVAL_READ", "count")
+        ).reset_index()
+        result.append(daily_data)
     print(f"Summing measurements to 1 day intervals... DONE")
     return result
-        
-def format_data(data: list[pd.DataFrame], set_missing_as_NA=True) -> pd.DataFrame:
+
+def format_data(data: list[pd.DataFrame]) -> pd.DataFrame:
     """
-    Turn the list of dataframes into a single dataframe where every row represents a household
-    and every column a day, a cell contains a households summed measurements on a specific day
+    Combine all meters into a single DataFrame where rows represent meters and columns represent dates.
     """
-    # Find the earliest and latest date in our data:
-    earliest = datetime.max.date()
-    latest = datetime.min.date()
-    total_meter_num = len(data)
-    current_meter_num = 0
+    # Get the full date range
+    all_dates = pd.date_range(
+        min(meter_data["DATE"].min() for meter_data in data),
+        max(meter_data["DATE"].max() for meter_data in data)
+    )
+
+    # Process each meter to ensure data is aligned with the full date range
+    formatted_data = []
     for meter_data in data:
-        current_meter_num += 1
-        print(f"Calculating start date and end date of measurements... {current_meter_num}/{total_meter_num}", end="\r")
-        first_date = meter_data.iloc[0]["DATE"]
-        last_date = meter_data.iloc[-1]["DATE"]
-        if last_date > latest:
-            latest = last_date
-        if first_date < earliest:
-            earliest = first_date
-    print(f"Calculating start date and end date of measurements... DONE")
-    print(f"earliest date: {earliest}")
-    print(f"latest date: {latest}")
+        # Reindex the data to include all dates, filling missing values with (0, 0) for both columns
+        meter_data = meter_data.set_index("DATE").reindex(all_dates, fill_value=0).reset_index()
+        
+        # Now, reassign the correct column names
+        meter_data.columns = ["DATE", "SUM_MEASUREMENTS", "AMOUNT_OF_MEASUREMENTS"]
 
-    # Generate a list from earliest to latest to serve as our columns
-    print(f"Generating column labels... ", end="\r")
-    dates = []
-    difference_in_days = latest - earliest
-    difference_in_days = difference_in_days.days
-    for i in range(difference_in_days+1):
-        dates.append(earliest + timedelta(days=i))
-    print(f"Generating column labels... DONE")
+        # Fill missing values for both columns
+        meter_data["SUM_MEASUREMENTS"].fillna(0, inplace=True)
+        meter_data["AMOUNT_OF_MEASUREMENTS"].fillna(0, inplace=True)
+        
+        # Append to formatted_data list
+        #print(meter_data[["SUM_MEASUREMENTS", "AMOUNT_OF_MEASUREMENTS"]].values)
+        formatted_data.append(list(zip(meter_data["SUM_MEASUREMENTS"], meter_data["AMOUNT_OF_MEASUREMENTS"])))
 
-    # Combine the measurements of the meters into a single matrix
-    result = []
-    meter_progresses = len(data) * [0]
-    total_days = len(dates)
-    current_day = 0
-    # We go column by column
-    for date in dates:
-        current_day += 1
-        print(f"Formatting matrix... {round(current_day/total_days*100)}%", end="\r")
-        column = []
-        # For every column we get its corresponding value (or None) of the meters on that date
-        for meter_index in range(len(data)):
-            meter_progress = meter_progresses[meter_index]
-            meter_data = data[meter_index]
-            if meter_progress == 0: # The start date of this meter has not been reached yet, check if we have reached it now
-                if meter_data.iloc[0]["DATE"] == date: # we have reached the start date of this meter
-                    column.append((meter_data.iloc[0]["SUM_MEASUREMENTS"], meter_data.iloc[0]["AMOUNT_OF_MEASUREMENTS"]))
-                    meter_progresses[meter_index] += 1
-                else: # We have not reached the start date of this meter, add None
-                    column.append(None)
-            elif meter_progress == -1: # The end date of this meter has been passed
-                column.append(None)
-            else: # date is in the range of this meter, add datapoint to matrix
-                if(meter_progress < len(meter_data)):
-                    column.append((meter_data.iloc[meter_progress]["SUM_MEASUREMENTS"], meter_data.iloc[meter_progress]["AMOUNT_OF_MEASUREMENTS"]))
-                    meter_progresses[meter_index] += 1
-                else:
-                    column.append(None)
-                    meter_progresses[meter_index] = -1
-        result.append(column)
+    # Combine all meters into a single DataFrame
+    result = pd.DataFrame(formatted_data, columns=all_dates)
+
     print(f"Formatting matrix... DONE")
-    result = pd.DataFrame(list(zip(*result)), columns=dates)
     return result
-
-
-
-            
-            
-
-    return
 
 def remove_first_year():
     """
@@ -183,4 +149,13 @@ def calculate_labels():
     """
     return
 
-
+def load_and_save_raw_data(data_dirname = "LADPU", save_filename="time_series_matrix.csv") -> pd.DataFrame:
+    """
+    loads the data from the original data files
+    this is slow so the result is stored for future use
+    """
+    data = read_data(directory=data_dirname) # read the data from the original files
+    data = change_interval_to_one_day(data) # sums all intervals in a day and discards some unneeded columns
+    data = format_data(data) # combines all seperate dataframes (1 for each meter) into a single dataframe
+    data.to_csv(save_filename, index=False) # save results becaues its a lot of data and takes long
+    return data
