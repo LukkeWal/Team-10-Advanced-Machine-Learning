@@ -140,15 +140,12 @@ def z_normalize( dataframe ):
 
     """
 
-    dataframe = dataframe.T  # take the transpose
-
     normalizedDf = StandardScaler().fit_transform(dataframe)
 
     return normalizedDf
 
 def split_train_and_test( dataframe ):
 
-    dataframe = dataframe.T
     nRows, nCols = dataframe.shape
     trainSize = int( nRows  * 0.8)
     trainData =  dataframe.iloc[:trainSize,:]
