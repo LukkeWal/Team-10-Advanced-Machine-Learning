@@ -1,6 +1,9 @@
 import pandas as pd
 import os
 from datetime import datetime, timedelta
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import TimeSeriesSplit
+
 """
 Prepares the data from https://datadryad.org/stash/dataset/doi:10.5061/dryad.m0cfxpp2c (22-11-2024) 
 to be used for machine learning purposes. It requires the data from the before mentioned link to be 
@@ -130,18 +133,29 @@ def apply_sliding_window():
     """
     return
 
-def z_normalize():
-    """
-    TODO: z normalize the given time series
-    """
-    return
+def z_normalize( dataframe ):
 
-def split_train_and_test():
     """
-    TODO: Split the data into a training set and a test set. This test set should not be used
-    for anything but the final benchmark of our project
+    # normalize the dataframe
+
     """
-    return
+
+    dataframe = dataframe.T  # take the transpose
+
+    normalizedDf = StandardScaler().fit_transform(dataframe)
+
+    return normalizedDf
+
+def split_train_and_test( dataframe ):
+
+    dataframe = dataframe.T
+    nRows, nCols = dataframe.shape
+    trainSize = int( nRows  * 0.8)
+    trainData =  dataframe.iloc[:trainSize,:]
+    testData = dataframe.iloc[trainSize:,:]
+
+
+    return trainData, testData
 
 def calculate_labels():
     """
