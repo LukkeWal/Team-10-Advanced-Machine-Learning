@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import os
 from datetime import datetime, timedelta
 from sklearn.preprocessing import StandardScaler
@@ -144,21 +145,15 @@ def z_normalize( dataframe ):
 
     return normalizedDf
 
-def split_train_and_test( dataframe ):
+def split_train_and_test( dataframe, size=0.8):
 
     nRows, nCols = dataframe.shape
-    trainSize = int( nRows  * 0.8)
+    trainSize = int( nRows  * size)
     trainData =  dataframe.iloc[:trainSize,:]
     testData = dataframe.iloc[trainSize:,:]
 
 
     return trainData, testData
-
-def calculate_labels():
-    """
-    TODO: Calculate the peak value and peak position labels of the training part of the dataset
-    """
-    return
 
 def load_and_save_raw_data(data_dirname = "LADPU", save_filename="time_series_matrix.csv") -> pd.DataFrame:
     """
@@ -170,3 +165,144 @@ def load_and_save_raw_data(data_dirname = "LADPU", save_filename="time_series_ma
     data = format_data(data) # combines all seperate dataframes (1 for each meter) into a single dataframe
     data.to_csv(save_filename, index=False) # save results becaues its a lot of data and takes long
     return data
+
+# --- Andrei's implementation of the sliding window & prev week
+
+def apply_sliding_window(meter_data):
+    """
+    Given the data **for a single meter**, this function constructs another DataFrame whose colummns are
+    
+    - the 7 days: week on which we predict
+    - (peak value, peak position): belonging to the next week
+
+    """
+
+    length_window_data = 7    # Lenght of window which makes the covariates
+    length_window_peak = 7    # Lenght of window from which we extract peaks
+    len_series = len(meter_data)
+
+    # Data frame of the desired format
+    colnames = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", 
+    "Peak Value", "Peak Position"]
+    feature_matrix_df = pd.DataFrame(columns = colnames)
+
+    for i in range(len_series - length_window_peak- length_window_data + 1):
+        # Separate the two relevant windows: one to save and one to get data from
+        week_data = meter_data[i:(i+length_window_data)]
+        week_peak = meter_data[(i+length_window_data):(i+length_window_data+length_window_peak)]
+
+        # Find the peak, append data
+        peak_value = np.max(week_peak)
+        peak_position = np.argmax(week_peak)
+        temp = np.array([peak_value, peak_position])
+
+        # Append to the data frame
+        feature = np.concatenate((week_data, temp))
+        feature_matrix_df.loc[i] = feature
+    
+    return feature_matrix_df
+
+def construct_feature_matrix_DataFrame(data: pd.DataFrame):
+    """
+    Applies the sliding window method to the data supplied by format_data(). The return will be a list
+    of pandas DataFrames:
+
+    - each DataFrame represents a meter
+    - rows represent 9-tuples data points represented by columns
+    - columns: 7 days + peak_position + peak_value
+    """
+
+    feature_matrix_list = []
+
+    # Iterating over rows
+    for i, row in data.iterrows():
+        # Strip the number of data points used for aggregation
+        meter_data = np.array([tuple_[0] for tuple_ in row])
+
+        # Construct the list of data frames for each user
+        feature_matrix_meter = apply_sliding_window(meter_data)
+        feature_matrix_list.append(feature_matrix_meter)
+
+    return feature_matrix_list
+
+def prev_week_DataFrame(meter_data):
+    """
+    Applies the 'PrevWeek' method to obtain peak positions and peak values.
+    It is applied to a Data Frame containing the data for a single meter.
+    It returns a copy of the initial data frame, with two extra columns: 
+
+    - "PrevWeek Peak Value": the predicted value via PrevWeek
+    - "PrevWeek Peak Position": the predicted value via PrevWeek
+    """
+
+    dropped_data = meter_data.drop(columns=["Peak Value", "Peak Position"])
+
+    meter_data["PrevWeek Peak Value"] = dropped_data.apply(np.max, axis=1) # Axis 1: max per each row
+    meter_data["PrevWeek Peak Position"] = dropped_data.apply(np.argmax, axis=1) 
+
+    return meter_data
+
+# --- Roberto's implementation of the sliding window & prev week
+
+def construct_feature_matrix_array(data: pd.DataFrame):
+    """
+    TODO: Calculate the peak value and peak position labels of the training part of the dataset
+
+    Applies the sliding window method to the data supplied by format_data(). The return will be a list
+    of pandas DataFrames:
+
+    - each DataFrame represents a meter
+    - rows represent 9-tuples data points represented by columns
+    - columns: 7 days + peak_position + peak_value
+    """
+
+    master_feature_matrix = []
+
+    for i in range(len(data.index)):
+
+        meter_time_series = data.iloc[i].values
+
+        lenght_time_series = len(meter_time_series)
+
+        meter_time_series = np.array([meter_time_series[j][0] for j in range(lenght_time_series)])
+
+
+        window_data = 7
+        window_peak = 7
+
+        for j in range(lenght_time_series - window_data-window_peak-1):
+
+            week_data = meter_time_series[j:j + window_data]
+            week_peak = meter_time_series[j + window_data:j + window_data + window_peak]
+            peak_value = np.max(week_peak)
+            peak_position = np.argmax(week_peak) % 7
+            temp = np.array([peak_value, peak_position])
+            feature = np.concatenate((week_data, temp))
+
+            if j == 0:
+                feature_matrix = feature
+
+            feature_matrix = np.vstack((feature_matrix, feature))
+
+
+        master_feature_matrix.append(feature_matrix)
+
+    return master_feature_matrix
+
+
+def prev_week_array(feature_matrix):
+
+    size = feature_matrix.shape[0]
+    peak_value_array = np.zeros(size)
+    peak_position_array = np.zeros(size)
+
+    for i in range(size):
+
+        week_values = feature_matrix[i, 0:7]
+        peak_value = np.max(week_values)
+        peak_position = np.argmax(week_values) % 7
+
+        peak_value_array[i] = peak_value
+        peak_position_array[i] = peak_position
+
+    return peak_value_array, peak_position_array
