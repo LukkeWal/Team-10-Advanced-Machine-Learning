@@ -1,14 +1,16 @@
+"""
+Prepares the data from https://datadryad.org/stash/dataset/doi:10.5061/dryad.m0cfxpp2c (22-11-2024) 
+to be used for machine learning purposes. It requires the data from the before mentioned link to be 
+unzipped, and the folder which contains the csv files should be placed in the same folder as this file
+"""
+
 import pandas as pd
 import os
 from datetime import datetime, timedelta
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
 
-"""
-Prepares the data from https://datadryad.org/stash/dataset/doi:10.5061/dryad.m0cfxpp2c (22-11-2024) 
-to be used for machine learning purposes. It requires the data from the before mentioned link to be 
-unzipped, and the folder which contains the csv files should be placed in the same folder as this file
-"""
+from DataStatistics import date_complete_cell_percentage, date_percentage_duplicate, meter_complete_cell_percentage, meter_percentage_consecutive_duplicate
 
 def string_to_datetime(time: str) -> datetime:
     """
@@ -76,7 +78,11 @@ def change_interval_to_one_day(data: list[pd.DataFrame]) -> list[pd.DataFrame]:
             continue
         
         # Ensure INTERVAL_TIME is a datetime object
-        meter_data["INTERVAL_TIME"] = meter_data["INTERVAL_TIME"].apply(string_to_datetime)
+        try:
+            meter_data["INTERVAL_TIME"] = meter_data["INTERVAL_TIME"].apply(string_to_datetime)
+        except ValueError as e:
+            print(f"skipping {current_meter_num} from data due to malformed datetime: {e}")
+            continue
         meter_data["DATE"] = meter_data["INTERVAL_TIME"].dt.date  # Extract date
 
         # Aggregate by DATE: sum measurements and count occurrences
@@ -85,7 +91,7 @@ def change_interval_to_one_day(data: list[pd.DataFrame]) -> list[pd.DataFrame]:
             AMOUNT_OF_MEASUREMENTS=("INTERVAL_READ", "count")
         ).reset_index()
         result.append(daily_data)
-    print(f"Summing measurements to 1 day intervals... DONE")
+    print("Summing measurements to 1 day intervals... DONE")
     return result
 
 def format_data(data: list[pd.DataFrame]) -> pd.DataFrame:
@@ -121,11 +127,37 @@ def format_data(data: list[pd.DataFrame]) -> pd.DataFrame:
     print(f"Formatting matrix... DONE")
     return result
 
-def remove_first_year():
-    """
-    TODO: Remove the first year of data since it has missing values
-    """
-    return
+def remove_bad_dates(data: pd.DataFrame):
+    # get the bad dates
+    _, bad_dates_completeness = date_complete_cell_percentage(data, acceptance_range=5, remove_threshold=90)
+    _, bad_dates_duplication = date_percentage_duplicate(data, remove_threshold=10)
+    bad_dates = bad_dates_completeness | bad_dates_duplication
+
+    # to give more information to the user we check how many groups 
+    # of consecutive dates are being removed and we print them
+    bad_dates = sorted(bad_dates)
+    group_count = 1
+    timeskip_dates = []
+    for i in range(1, len(bad_dates)):
+        if bad_dates[i] - bad_dates[i-1] > timedelta(days=1):
+            group_count += 1  # New group starts if dates are not consecutive
+            timeskip_dates.append(bad_dates[i])
+    print(f"we are removing {len(bad_dates)} / {len(data.columns)} columns. There will be {group_count} timeskips at:")
+    # for t in timeskip_dates:
+    #     print(f"\t{t.date()}")
+    for date in bad_dates:
+        data = data.drop(date, axis=1)
+    return data
+
+def remove_bad_meters(data: pd.DataFrame):
+    # the removal parameters are harsher on meters than dates because less meters has less impact compared to less dates
+    _, bad_meters_completeness = meter_complete_cell_percentage(data, acceptance_range=0, remove_threshold=99)
+    _, bad_meters_duplication = meter_percentage_consecutive_duplicate(data, remove_threshold=1)
+    bad_meters = bad_meters_completeness | bad_meters_duplication
+    print(f"We are removing {len(bad_meters)}/{len(data.columns)}, {len(bad_meters_duplication)} for duplication and {len(bad_meters_completeness)} for low competeness")
+    for index in bad_meters:
+        data = data.drop(index)
+    return data
 
 def apply_sliding_window():
     """
@@ -168,5 +200,8 @@ def load_and_save_raw_data(data_dirname = "LADPU", save_filename="time_series_ma
     data = read_data(directory=data_dirname) # read the data from the original files
     data = change_interval_to_one_day(data) # sums all intervals in a day and discards some unneeded columns
     data = format_data(data) # combines all seperate dataframes (1 for each meter) into a single dataframe
+    data = remove_bad_dates(data) # remove dates(columns) that have missing values or a suspicious amount of duplicate values
+    data = remove_bad_meters(data)
+    #TODO: data = z_normalize(data)
     data.to_csv(save_filename, index=False) # save results becaues its a lot of data and takes long
     return data
