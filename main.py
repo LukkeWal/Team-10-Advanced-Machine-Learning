@@ -1,21 +1,26 @@
 import time
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import root_mean_squared_error
 
 from PrepareData import load_and_save_raw_data, load_precomputed_data, construct_feature_matrix_DataFrame, prev_week_DataFrame
+from PrepareData import construct_feature_matrix_array
 from DataStatistics import generate_and_visualize_stats
+from LinearRegression import linregress_meter, linregress_global
+from XGBoost import XgBoost_meter
 
 from pdb import set_trace
 
 def main():
     # - Load the data
     
-    start_time = time.time()
-    #data = load_and_save_raw_data("LADPU", "time_series_matrix.csv")
+    # start_time = time.time()
+    # #data = load_and_save_raw_data("LADPU", "time_series_matrix.csv")
     data = load_precomputed_data("time_series_matrix_TESTING.csv")
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"loaded data in {elapsed_time:.4f} seconds")
-    #generate_and_visualize_stats(data)
+    # end_time = time.time()
+    # elapsed_time = end_time - start_time
+    # print(f"loaded data in {elapsed_time:.4f} seconds")
+    # #generate_and_visualize_stats(data)
 
     # - Apply sliding window
 
@@ -25,10 +30,58 @@ def main():
     elapsed_time = end_time - start_time
     print(f"processed data in {elapsed_time:.4f} seconds")
 
-    # set_trace()
-    # meter_1 = data_processed[0]
-    # temp = prev_week_DataFrame(meter_1)
-    # print("Stop debugger here")
+    # - Linear Regression
+
+    # Test for a meter
+    data_meter_1 = data_processed[0]
+    y_pred, y_true = linregress_meter(data_meter_1, split_vertical=True)
+
+    print(y_true.mean(), y_true.std())
+    print(f"RMSE: {root_mean_squared_error(y_pred, y_true)}")
+    
+    fig = plt.figure(figsize=(6, 6))
+
+    plt.plot(y_true, color="blue", label="True")
+    plt.plot(y_pred, color="red", label="Prediction")
+
+    plt.title("Meter 0 - local prediction")
+    plt.legend()
+    plt.show()
+
+    # Global prediction
+    y_pred, y_true = linregress_global(data_processed, split_horizontal=True)
+
+    print(y_true.mean(), y_true.std())
+    print(f"RMSE: {root_mean_squared_error(y_pred, y_true)}")
+    
+    fig = plt.figure(figsize=(6, 6))
+
+    plt.plot(y_true, color="blue", label="True")
+    plt.plot(y_pred, color="red", label="Prediction")
+
+    plt.title("Last 80% Meters - Global prediction")
+    plt.legend()
+    plt.show()
+
+    # - XGBoost
+
+    feature_matrices = construct_feature_matrix_array(data)
+    trainX = feature_matrices[0][:,0:-2]
+    trainY = feature_matrices[0][:,-2]
+    testX = feature_matrices[2][:,0:-2]
+    testY = feature_matrices[2][:,-2]
+
+    y_pred, scores = XgBoost_meter(trainX, testX, trainY, testY)
+    print(scores)
+    
+    fig = plt.figure(figsize=(6, 6))
+    
+    plt.plot(testY,label='true')
+    plt.plot(y_pred,label='pred')
+
+    plt.title("XGBoost for one meter")
+    plt.legend()
+    plt.show()
 
     return
 
