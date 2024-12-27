@@ -9,7 +9,7 @@ import numpy as np
 import os
 from datetime import datetime, timedelta
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import TimeSeriesSplit
+import matplotlib.pyplot as plt
 
 from DataStatistics import date_complete_cell_percentage, date_percentage_duplicate, meter_complete_cell_percentage, meter_percentage_consecutive_duplicate
 
@@ -279,35 +279,68 @@ def prev_week_DataFrame(meter_data):
 
 # --- Roberto's implementation of the sliding window & prev week
 
+
+def check_skipped_dates(date_array):
+
+    """
+
+    Return True if within the given date arrays a column has been deleted
+
+    """
+
+    bad_date_status = False
+
+    for i in range(len(date_array)-1):
+
+        day1 = datetime.strptime(date_array[i], '%Y-%m-%d').date()
+        day2 = datetime.strptime(date_array[i + 1], '%Y-%m-%d').date()
+
+        difference = day2 - day1
+
+        if difference.days != timedelta(days=1).days: # if two dates are consecutive in the array but not temporally consecutive we have deleted one
+
+            bad_date_status = True
+
+    return bad_date_status
+
+
 def construct_feature_matrix_array(data: pd.DataFrame):
     """
-    TODO: Calculate the peak value and peak position labels of the training part of the dataset
 
     Applies the sliding window method to the data supplied by format_data(). The return will be a list
-    of pandas DataFrames:
+    of matrices:
 
-    - each DataFrame represents a meter
+    - each matrix represents a meter
     - rows represent 9-tuples data points represented by columns
     - columns: 7 days + peak_position + peak_value
     """
 
     master_feature_matrix = []
 
+    dates = data.columns
+
     for i in range(len(data.index)):
+
 
         meter_time_series = data.iloc[i].values
 
         lenght_time_series = len(meter_time_series)
 
-        meter_time_series = np.array([meter_time_series[j][0] for j in range(lenght_time_series)])
+        meter_time_series = np.array([  eval(meter_time_series[j])[0] for j in range(lenght_time_series)])
 
 
         window_data = 7
         window_peak = 7
 
+        meter_time_series = (meter_time_series - meter_time_series.mean())/(meter_time_series.std()) # normalize the time series
+
         for j in range(lenght_time_series - window_data-window_peak-1):
 
             week_data = meter_time_series[j:j + window_data]
+
+            if check_skipped_dates(dates[j:j+window_data]) == True:
+                continue # we skip if there is a bad date
+
             week_peak = meter_time_series[j + window_data:j + window_data + window_peak]
             peak_value = np.max(week_peak)
             peak_position = np.argmax(week_peak) % 7
@@ -326,6 +359,15 @@ def construct_feature_matrix_array(data: pd.DataFrame):
 
 
 def prev_week_array(feature_matrix):
+
+    """
+    Applies the 'PrevWeek' method to obtain peak positions and peak values.
+    It is applied to a Data Frame containing the data for a single meter.
+    It returns a copy of the initial data frame, with two extra columns:
+
+    - "PrevWeek Peak Value": the predicted value via PrevWeek
+    - "PrevWeek Peak Position": the predicted value via PrevWeek
+    """
 
     size = feature_matrix.shape[0]
     peak_value_array = np.zeros(size)
