@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 
 from DataStatistics import date_complete_cell_percentage, date_percentage_duplicate, meter_complete_cell_percentage, meter_percentage_consecutive_duplicate
 
+##### Data preprocessing: loading raw files, bringing to desired format in one csv, saving raw files #####
+
 def string_to_datetime(time: str) -> datetime:
     """
     Helper function to transform strings of dates found in the raw data to datetime objects
@@ -160,12 +162,6 @@ def remove_bad_meters(data: pd.DataFrame):
         data = data.drop(index)
     return data
 
-def apply_sliding_window():
-    """
-    TODO: Turn the time series into shorter time series that can be used as a feature
-    """
-    return
-
 def z_normalize( dataframe ):
 
     """
@@ -201,20 +197,60 @@ def load_and_save_raw_data(data_dirname = "LADPU", save_filename="time_series_ma
     data.to_csv(save_filename, index=False) # save results becaues its a lot of data and takes long
     return data
 
-# --- Andrei's implementation of the sliding window & prev week
+##### Data processing: Sliding window (with skipping dates), normalization, saving and loading #####
 
-def apply_sliding_window(meter_data):
+# --- Andrei's implementation (DataFrame focused)
+
+def skip_dates_mask(data: pd.DataFrame,
+                    length_window_data = 7, length_window_peak = 7):
+    """
+    This function constructs an array of booleans which dictate which windows to be skipped
+    (due to dates having been skipped within the window). It works on the DataFrame supplied by
+    format_data()
+
+    True = Skip window ; False = Continue with window
+
+    The underlying principle is that all meters need to skip the same dates. That is, missing
+    dates are the same for all users. So a mask for one user is a mask for all.
+    """
+ 
+    dates = data.columns  # Extract all the dates
+    dates = dates.to_pydatetime()
+    mask = []
+
+    for i in range(len(dates) - length_window_peak- length_window_data + 1):
+        dates_window = dates[i:(i+length_window_data+length_window_peak)]
+        bad_date_status = False
+
+        for i in range(len(dates_window)-1):
+            difference = dates_window[i+1] - dates_window[i]
+
+            if difference.days != timedelta(days=1).days: # if two dates are consecutive in the array but not temporally consecutive we have deleted one
+                bad_date_status = True
+                break  # Stop checking if we hit a faulty date already
+
+        mask.append(bad_date_status)
+    
+    return np.array(mask)
+
+def apply_sliding_window(meter_data, dates_mask, normalize=True):
     """
     Given the data **for a single meter**, this function constructs another DataFrame whose colummns are
     
     - the 7 days: week on which we predict
     - (peak value, peak position): belonging to the next week
 
+    TODO: This function further checks if dates have been skipped and performs z-normalization 
+    if normalization = True.
     """
 
     length_window_data = 7    # Lenght of window which makes the covariates
     length_window_peak = 7    # Lenght of window from which we extract peaks
     len_series = len(meter_data)
+    
+    # Normalize
+    if normalize == True:
+        meter_data = (meter_data - meter_data.mean() * np.ones(len_series)) / meter_data.std()
 
     # Data frame of the desired format
     colnames = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7", 
@@ -222,6 +258,10 @@ def apply_sliding_window(meter_data):
     feature_matrix_df = pd.DataFrame(columns = colnames)
 
     for i in range(len_series - length_window_peak- length_window_data + 1):
+        # Check whether to skip the window or not
+        if dates_mask[i] == True:
+            continue
+
         # Separate the two relevant windows: one to save and one to get data from
         week_data = meter_data[i:(i+length_window_data)]
         week_peak = meter_data[(i+length_window_data):(i+length_window_data+length_window_peak)]
@@ -237,7 +277,7 @@ def apply_sliding_window(meter_data):
     
     return feature_matrix_df
 
-def construct_feature_matrix_DataFrame(data: pd.DataFrame):
+def construct_feature_matrix_DataFrame(data: pd.DataFrame, normalize=True):
     """
     Applies the sliding window method to the data supplied by format_data(). The return will be a list
     of pandas DataFrames:
@@ -245,46 +285,59 @@ def construct_feature_matrix_DataFrame(data: pd.DataFrame):
     - each DataFrame represents a meter
     - rows represent 9-tuples data points represented by columns
     - columns: 7 days + peak_position + peak_value
+
+    If normalize = True, the data within each meter is z-normalized.
     """
 
     feature_matrix_list = []
+    dates_mask = skip_dates_mask(data)  # Mask with the windows to be skipped by the sliding window method
 
     # Iterating over rows
     for i, row in data.iterrows():
         # Strip the number of data points used for aggregation
         meter_data = np.array([tuple_[0] for tuple_ in row])
-
+        
         # Construct the list of data frames for each user
-        feature_matrix_meter = apply_sliding_window(meter_data)
+        feature_matrix_meter = apply_sliding_window(meter_data, dates_mask, normalize=normalize)
         feature_matrix_list.append(feature_matrix_meter)
 
     return feature_matrix_list
 
-def prev_week_DataFrame(meter_data):
+def load_and_save_processed_data(precomp_data_dirname="time_series_matrix.csv",
+                                 save_data=False) -> pd.DataFrame:
     """
-    Applies the 'PrevWeek' method to obtain peak positions and peak values.
-    It is applied to a Data Frame containing the data for a single meter.
-    It returns a copy of the initial data frame, with two extra columns: 
+    Loads the precomputed data (as returned by format_data()) from one of the 
+    csv files. It returns the processed data (after z-normalization and sliding window)
+    (same format as construct_feature_matrix_DataFrame()),
+    and it has the option to save for each user its respective Data Frame.
 
-    - "PrevWeek Peak Value": the predicted value via PrevWeek
-    - "PrevWeek Peak Position": the predicted value via PrevWeek
+    NOTE: To read the precomputed data, it suffices to use the read_data("ProcessedData")
+
+    TODO: Create the saving data function
     """
 
-    dropped_data = meter_data.drop(columns=["Peak Value", "Peak Position"])
+    # Load the full data set
+    data = load_precomputed_data(precomp_data_dirname)   
+    # Compute list of DataFrames: each Df for a user. 
+    # Data frame in desired format ready to plug 
+    data_processed = construct_feature_matrix_DataFrame(data, normalize=True)
 
-    meter_data["PrevWeek Peak Value"] = dropped_data.apply(np.max, axis=1) # Axis 1: max per each row
-    meter_data["PrevWeek Peak Position"] = dropped_data.apply(np.argmax, axis=1) 
+    if save_data == True: # save results becaues its a lot of data and takes long
+        for i in range(len(data_processed)):
+            processed_meter_df = data_processed[i]
+            file_path = os.path.join('ProcessedData', f'{i}.csv')
+            processed_meter_df.to_csv(file_path, index=False)
 
-    return meter_data
+    return data_processed
 
-# --- Roberto's implementation of the sliding window & prev week
-
+# --- Roberto's implementation (array focused)
 
 def check_skipped_dates(date_array):
 
     """
-
-    Return True if within the given date arrays a column has been deleted
+    The function returns True if within the given array of dates, a column has been deleted.
+    That is, the function returns True if there exist two consecutive dates (in the array)
+    that are not temporally consecutive.
 
     """
 
@@ -298,8 +351,8 @@ def check_skipped_dates(date_array):
         difference = day2 - day1
 
         if difference.days != timedelta(days=1).days: # if two dates are consecutive in the array but not temporally consecutive we have deleted one
-
             bad_date_status = True
+            break  # Stop checking if we hit a faulty date already
 
     return bad_date_status
 
@@ -334,7 +387,7 @@ def construct_feature_matrix_array(data: pd.DataFrame):
 
         meter_time_series = (meter_time_series - meter_time_series.mean())/(meter_time_series.std()) # normalize the time series
 
-        for j in range(lenght_time_series - window_data-window_peak-1):
+        for j in range(lenght_time_series - window_data-window_peak-1): # +1 ?
 
             week_data = meter_time_series[j:j + window_data]
 
@@ -357,7 +410,35 @@ def construct_feature_matrix_array(data: pd.DataFrame):
 
     return master_feature_matrix
 
+##### Baselines: PrevWeek #####
 
+# Andrei
+def prev_week_DataFrame(meter_data):
+    """
+    Applies the 'PrevWeek' method to obtain peak positions and peak values.
+    It is applied to a Data Frame containing the data for a single meter.
+    
+    DEPRECATED: It returns a copy of the initial data frame, with two extra columns: 
+    UPDATED: To maintain consistency with LinearRegression.py, the returned objects are
+    only the relevant arrays: one with the peak maximum, one with the peak position 
+
+    - "PrevWeek Peak Value": the predicted value via PrevWeek
+    - "PrevWeek Peak Position": the predicted value via PrevWeek
+    """
+
+    dropped_data = meter_data.drop(columns=["Peak Value", "Peak Position"])
+
+    meter_data["PrevWeek Peak Value"] = dropped_data.apply(np.max, axis=1) # Axis 1: max per each row
+    meter_data["PrevWeek Peak Position"] = dropped_data.apply(np.argmax, axis=1) 
+
+    #return meter_data
+
+    peak_value = meter_data["PrevWeek Peak Value"].values
+    peak_position = meter_data["PrevWeek Peak Position"].values
+
+    return peak_value, peak_position
+
+# Roberto
 def prev_week_array(feature_matrix):
 
     """
