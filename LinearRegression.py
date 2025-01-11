@@ -4,6 +4,44 @@ from sklearn.linear_model import LinearRegression
 
 from PrepareData import split_train_and_test
 
+##### Code examples: Use linear regression and plot #####
+
+# from sklearn.metrics import root_mean_squared_error
+# import matplotlib.pyplot as plt
+
+# # Test for a meter
+# data_meter_1 = data_processed[0]
+# y_pred, y_true = linregress_meter(data_meter_1, split_vertical=True)
+
+# print(y_true.mean(), y_true.std())
+# print(f"RMSE: {root_mean_squared_error(y_pred, y_true)}")
+
+# fig = plt.figure(figsize=(6, 6))
+
+# plt.plot(y_true, color="blue", label="True")
+# plt.plot(y_pred, color="red", label="Prediction")
+
+# plt.title("Meter 0 - local prediction")
+# plt.legend()
+# plt.show()
+
+# # Global prediction
+# y_pred, y_true = linregress_global(data_processed, split_horizontal=True)
+
+# print(y_true.mean(), y_true.std())
+# print(f"RMSE: {root_mean_squared_error(y_pred, y_true)}")
+
+# fig = plt.figure(figsize=(6, 6))
+
+# plt.plot(y_true, color="blue", label="True")
+# plt.plot(y_pred, color="red", label="Prediction")
+
+# plt.title("Last 80% Meters - Global prediction")
+# plt.legend()
+# plt.show()
+
+##### Main functions #####
+
 # Linear Regression for one user
 def linregress_meter(data_meter: pd.DataFrame,
                      split_vertical = False,

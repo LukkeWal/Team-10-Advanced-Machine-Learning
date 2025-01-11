@@ -11,7 +11,26 @@ from datetime import datetime, timedelta
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
-from DataStatistics import date_complete_cell_percentage, date_percentage_duplicate, meter_complete_cell_percentage, meter_percentage_consecutive_duplicate
+from DataStatistics import date_complete_cell_percentage, date_percentage_duplicate
+from DataStatistics import meter_complete_cell_percentage, meter_percentage_consecutive_duplicate
+
+##### Code examples: How to load and save the data #####
+
+# start_time = time.time()
+# data = load_and_save_raw_data("LADPUTESTING", "time_series_matrix_TESTING1.csv")
+# generate_and_visualize_stats(data)
+# data = load_precomputed_data("time_series_matrix_TESTING1.csv")
+# end_time = time.time()
+# elapsed_time = end_time - start_time
+# print(f"loaded data in {elapsed_time:.4f} seconds")
+# generate_and_visualize_stats(data)
+
+# start_time = time.time()
+# temp = load_and_save_processed_data(precomp_data_dirname="time_series_matrix.csv",
+#                                     save_data=True)
+# end_time = time.time()
+# elapsed_time = end_time - start_time
+# print(f"processed data in {elapsed_time:.4f} seconds")
 
 ##### Data preprocessing: loading raw files, bringing to desired format in one csv, saving raw files #####
 
@@ -240,8 +259,8 @@ def apply_sliding_window(meter_data, dates_mask, normalize=True):
     - the 7 days: week on which we predict
     - (peak value, peak position): belonging to the next week
 
-    TODO: This function further checks if dates have been skipped and performs z-normalization 
-    if normalization = True.
+    This function performs z-normalization if normalization = True and skipps faulty windows
+    as given by dates_mask.
     """
 
     length_window_data = 7    # Lenght of window which makes the covariates
@@ -312,8 +331,6 @@ def load_and_save_processed_data(precomp_data_dirname="time_series_matrix.csv",
     and it has the option to save for each user its respective Data Frame.
 
     NOTE: To read the precomputed data, it suffices to use the read_data("ProcessedData")
-
-    TODO: Create the saving data function
     """
 
     # Load the full data set
