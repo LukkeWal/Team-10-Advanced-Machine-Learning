@@ -10,6 +10,7 @@ import os
 from datetime import datetime, timedelta
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+from sklearn.model_selection import KFold
 
 from DataStatistics import date_complete_cell_percentage, date_percentage_duplicate
 from DataStatistics import meter_complete_cell_percentage, meter_percentage_consecutive_duplicate
@@ -481,3 +482,20 @@ def prev_week_array(feature_matrix):
         peak_position_array[i] = peak_position
 
     return peak_value_array, peak_position_array
+
+data_cool = read_data("ProcessedDataTest")
+
+def get_folds(data,nSplits):
+
+    kf = KFold(n_splits=nSplits)
+    kf.get_n_splits(data)
+
+    trainVector = []
+    testVector = []
+
+    for i, (train_index, test_index) in enumerate(kf.split(data)):
+
+        trainVector.append( [data[i] for i in train_index] )
+        testVector.append(  [data[i] for i in test_index] )
+
+    return trainVector, testVector

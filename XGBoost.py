@@ -29,16 +29,23 @@ from sklearn.metrics import root_mean_squared_error
 
 ##### Main functions #####
 
-def XgBoost_meter(X_train, X_test, y_train, y_test, ):
+def XgBoost(data_train, testData,eta,max_depth):
 
-    model = XGBRegressor() # specify paramters
+    data_train = pd.concat(data_train, axis=0, ignore_index=True)
+    data_test = pd.concat(testData, axis=0, ignore_index=True)
+
+    y_train = data_train["Peak Value"].values
+    X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
+
+    y_test = data_test["Peak Value"].values
+    X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
+
+    # Fit XGBoost
+    model = XGBRegressor(learning_rate = eta, max_depth = max_depth)  # specify paramters
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
-    RMSE = root_mean_squared_error(y_test, y_pred)
-    scores = [RMSE]
-
-    return y_pred, scores
+    return y_pred, y_test
 
 def XgBoost_global(data_meters: list[pd.DataFrame],
                    split_horizontal = False, 
@@ -94,3 +101,5 @@ def XgBoost_global(data_meters: list[pd.DataFrame],
         y_pred = model.predict(X_test)
 
         return y_pred, y_test
+
+

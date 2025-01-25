@@ -3,10 +3,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import root_mean_squared_error
-from PrepareData import read_data, prev_week_DataFrame
+from sklearn.metrics import root_mean_squared_error, accuracy_score
+from PrepareData import read_data, prev_week_DataFrame,get_folds
 from LinearRegression import linregress_meter, linregress_global
-from XGBoost import XgBoost_meter, XgBoost_global
+from XGBoost import XgBoost_global,XgBoost
+from xgboost import XGBRegressor, XGBClassifier
+
 
 from pdb import set_trace
 
@@ -171,7 +173,141 @@ def main():
     # plt.legend()
     # plt.show()
 
-    return
+    def XgBoost_regression(data_train, testData, params):
+
+        data_train = pd.concat(data_train, axis=0, ignore_index=True)
+        data_test = pd.concat(testData, axis=0, ignore_index=True)
+
+        y_train = data_train["Peak Value"].values
+        X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
+
+        y_test = data_test["Peak Value"].values
+        X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
+
+        model = XGBRegressor( max_depth = params['max_depth'][0], min_child_weight = params['min_child_weight'][0],
+                              learning_rate = params['learning_rate'][0], subsample = params['subsample'][0],colsample_bytree = params['colsample_bytree'][0],
+                              reg_alpha = params['reg_alpha'][0],reg_lambda = params['reg_lambda'][0],random_state=params['random_state'])
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        return y_pred, y_test
+
+
+    def XgBoost_classifier(data_train, testData, params):
+
+        data_train = pd.concat(data_train, axis=0, ignore_index=True)
+        data_test = pd.concat(testData, axis=0, ignore_index=True)
+
+        y_train = data_train["Peak Position"].values
+        X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
+
+        y_test = data_test["Peak Position"].values
+        X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
+
+        model = XGBClassifier( max_depth = params['max_depth'][0], min_child_weight = params['min_child_weight'][0],
+                              learning_rate = params['learning_rate'][0], subsample = params['subsample'][0],colsample_bytree = params['colsample_bytree'][0],
+                              reg_alpha = params['reg_alpha'][0],reg_lambda = params['reg_lambda'][0],random_state=params['random_state'])
+
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        return y_pred, y_test
+
+    def xgBoost_cv(whichTask):
+
+
+
+        size = 0.8
+        data_train = data[:int(size * len(data))] # for cross validation
+        # data_test = data[int(size * len(data)):] # for final testing
+
+        nSplits = 3
+        folds = get_folds(data_train,nSplits)
+
+        maxIter = 100
+
+        best_space = {'max_depth': 0,
+                    'min_child_weight': 0,
+                    'learning_rate': 0,
+                    'subsample': 0,
+                    'colsample_bytree': 0,
+                    'reg_alpha': 0,
+                    'reg_lambda': 0,
+                    'random_state': 42
+                    }
+
+
+        if whichTask == 'regression':
+            best_rmse = 10000
+
+            for i in range(maxIter):
+                print(i)
+                search_space = {'max_depth': np.random.randint(1, 11, 1),
+                        'min_child_weight': np.random.uniform(0, 10, 1),
+                        'learning_rate': np.random.uniform(0, 1, 1),
+                        'subsample': np.random.uniform(0.1, 1, 1),
+                        'colsample_bytree': np.random.uniform(0.1, 1, 1),
+                        'reg_alpha': np.random.uniform(0, 5, 1),
+                        'reg_lambda': np.random.uniform(0, 5, 1),
+                        'random_state': 42
+                        }
+
+                rmse_results = []
+
+                for k in range(nSplits):
+                    train_data = folds[0][k]
+                    test_data = folds[1][k]
+
+                    y_pred, y_true = XgBoost_regression(train_data, test_data,search_space )
+
+                    rmse_results.append(root_mean_squared_error(y_true, y_pred))
+
+                    avg_rmse = np.mean(rmse_results)
+
+                if avg_rmse < best_rmse:
+
+                    best_rmse = avg_rmse
+                    best_space = search_space
+
+            return best_space, best_rmse
+
+        if whichTask == 'classification':
+
+            best_accuracy = -1
+
+            for i in range(maxIter):
+                print(i)
+                search_space = {'max_depth': np.random.randint(1, 11, 1),
+                            'min_child_weight': np.random.uniform(0, 10, 1),
+                            'learning_rate': np.random.uniform(0, 1, 1),
+                            'subsample': np.random.uniform(0.1, 1, 1),
+                            'colsample_bytree': np.random.uniform(0.1, 1, 1),
+                            'reg_alpha': np.random.uniform(0, 5, 1),
+                            'reg_lambda': np.random.uniform(0, 5, 1),
+                            'random_state': 42
+                            }
+
+                accuracy_results = []
+
+                for k in range(nSplits):
+                    train_data = folds[0][k]
+                    test_data = folds[1][k]
+
+                    y_pred, y_true = XgBoost_classifier(train_data, test_data, search_space)
+
+                    accuracy_results.append(accuracy_score(y_true, y_pred))
+
+                    avg_accuracy = np.mean(accuracy_results)
+
+                if avg_accuracy > best_accuracy:
+                    best_accuracy = avg_accuracy
+                    best_space = search_space
+
+            return best_space, best_accuracy
+
+    print(xgBoost_cv('regression'))
+    print(xgBoost_cv('classification'))
+
 
 if __name__ == "__main__":
     main()
