@@ -203,7 +203,7 @@ def split_train_and_test( dataframe, size=0.8):
 
     return trainData, testData
 
-def load_and_save_raw_data(data_dirname = "LADPU", save_filename="time_series_matrix.csv") -> pd.DataFrame:
+def load_raw_data(data_dirname = "LADPU") -> pd.DataFrame:
     """
     loads the data from the original data files
     this is slow so the result is stored for future use
@@ -211,11 +211,15 @@ def load_and_save_raw_data(data_dirname = "LADPU", save_filename="time_series_ma
     data = read_data(directory=data_dirname) # read the data from the original files
     data = change_interval_to_one_day(data) # sums all intervals in a day and discards some unneeded columns
     data = format_data(data) # combines all seperate dataframes (1 for each meter) into a single dataframe
+    return data
+
+def clean_data(data):
     data = remove_bad_dates(data) # remove dates(columns) that have missing values or a suspicious amount of duplicate values
     data = remove_bad_meters(data)
-    #TODO: data = z_normalize(data)
-    data.to_csv(save_filename, index=False) # save results becaues its a lot of data and takes long
     return data
+
+def save_data(data: pd.DataFrame, save_filename="time_series_matrix.csv"):
+    data.to_csv(save_filename, index=False) # save results becaues its a lot of data and takes long
 
 ##### Data processing: Sliding window (with skipping dates), normalization, saving and loading #####
 

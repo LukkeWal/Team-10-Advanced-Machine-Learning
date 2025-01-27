@@ -115,3 +115,73 @@ def visualize_date_duplicates(percentages: list):
     plt.grid(True)  # Optional: Add a grid for better readability
     # Show the plot
     plt.show()
+
+def combined_boxplot(dataDirty, dataClean):
+    PoC_Meter_Dirty, _ = meter_complete_cell_percentage(dataDirty)
+    PoC_Dates_Dirty, _ = date_complete_cell_percentage(dataDirty, acceptance_range=5, remove_threshold=90)
+    PoD_Meter_Dirty, _ = meter_percentage_consecutive_duplicate(dataDirty)
+    PoD_Dates_Dirty, _ = date_percentage_duplicate(dataDirty, remove_threshold=10)
+    Poc_Meter_Clean, _ = meter_complete_cell_percentage(dataClean)
+    Poc_Dates_Clean, _ = date_complete_cell_percentage(dataClean, acceptance_range=5, remove_threshold=90)
+    PoD_Meter_Clean, _ = meter_percentage_consecutive_duplicate(dataClean)
+    PoD_Dates_Clean, _ = date_percentage_duplicate(dataClean, remove_threshold=10)
+    fig, ax = plt.subplots()
+    boxplot = ax.boxplot([PoC_Meter_Dirty, 
+                PoC_Dates_Dirty, 
+                PoD_Meter_Dirty, 
+                PoD_Dates_Dirty, 
+                Poc_Meter_Clean, 
+                Poc_Dates_Clean, 
+                PoD_Meter_Clean, 
+                PoD_Dates_Clean],
+                notch=True,
+                patch_artist=True)
+    colors = ["red", "red", "red", "red", "green", "green", "green", "green"]
+    for patch, color in zip(boxplot['boxes'], colors):
+        patch.set_facecolor(color)
+    ax.set_xticks([1, 2, 3, 4, 5, 6, 7, 8])
+    ax.set_xticklabels(["PoC_Meter", 
+                        "PoC_Dates", 
+                        "PoD_Meter", 
+                        "PoD_Dates", 
+                        "Poc_Meter", 
+                        "Poc_Dates", 
+                        "PoD_Meter", 
+                        "PoD_Dates"], 
+                        rotation=45)
+    
+    ax.set_ylabel('Percentage')
+    ax.set_ylim(-1, 101)
+    plt.show()
+    return
+
+def combined_boxplot_one_set(data):
+    PoC_Meter, _ = meter_complete_cell_percentage(data)
+    PoC_Dates, _ = date_complete_cell_percentage(data, acceptance_range=5, remove_threshold=90)
+    PoD_Meter, _ = meter_percentage_consecutive_duplicate(data)
+    PoD_Dates, _ = date_percentage_duplicate(data, remove_threshold=10)
+    fig, ax = plt.subplots()
+    boxplot = ax.boxplot([PoC_Meter, 
+                        PoC_Dates, 
+                        PoD_Meter, 
+                        PoD_Dates],
+                        notch=True,
+                        patch_artist=True)
+    colors = ["green", "red", "blue", "yellow"]
+    for patch, color in zip(boxplot['boxes'], colors):
+        patch.set_facecolor(color)
+    # Customize other elements
+    for element in ['medians', 'whiskers', 'caps', 'fliers']:
+        for line in boxplot[element]:
+            line.set_color('black')  # Set color for median, whiskers, caps, and fliers
+    ax.set_xticks([1, 2, 3, 4])
+    ax.set_xticklabels(["PoC_Meter", 
+                        "PoC_Dates", 
+                        "PoD_Meter", 
+                        "PoD_Dates"], 
+                        rotation=45)
+    
+    ax.set_ylabel('Percentage')
+    ax.set_ylim(-1, 101)
+    plt.tight_layout()
+    plt.show()
