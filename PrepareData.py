@@ -430,15 +430,14 @@ def construct_feature_matrix_array(data: pd.DataFrame):
 
 ##### Baselines: PrevWeek #####
 
-# Andrei
-def prev_week_DataFrame(meter_data):
+def prev_week(meter_data):
     """
     Applies the 'PrevWeek' method to obtain peak positions and peak values.
     It is applied to a Data Frame containing the data for a single meter.
-    
-    DEPRECATED: It returns a copy of the initial data frame, with two extra columns: 
+
+    DEPRECATED: It returns a copy of the initial data frame, with two extra columns:
     UPDATED: To maintain consistency with LinearRegression.py, the returned objects are
-    only the relevant arrays: one with the peak maximum, one with the peak position 
+    only the relevant arrays: one with the peak maximum, one with the peak position
 
     - "PrevWeek Peak Value": the predicted value via PrevWeek
     - "PrevWeek Peak Position": the predicted value via PrevWeek
@@ -446,44 +445,70 @@ def prev_week_DataFrame(meter_data):
 
     dropped_data = meter_data.drop(columns=["Peak Value", "Peak Position"])
 
-    meter_data["PrevWeek Peak Value"] = dropped_data.apply(np.max, axis=1) # Axis 1: max per each row
-    meter_data["PrevWeek Peak Position"] = dropped_data.apply(np.argmax, axis=1) 
+    meter_data["PrevWeek Peak Value"] = dropped_data.apply(np.max, axis=1)  # Axis 1: max per each row
+    meter_data["PrevWeek Peak Position"] = dropped_data.apply(np.argmax, axis=1)
 
-    #return meter_data
+    # return meter_data
 
     peak_value = meter_data["PrevWeek Peak Value"].values
     peak_position = meter_data["PrevWeek Peak Position"].values
 
     return peak_value, peak_position
 
-# Roberto
-def prev_week_array(feature_matrix):
+# Andrei
+# def prev_week_DataFrame(meter_data):
+#     """
+#     Applies the 'PrevWeek' method to obtain peak positions and peak values.
+#     It is applied to a Data Frame containing the data for a single meter.
+    
+#     DEPRECATED: It returns a copy of the initial data frame, with two extra columns: 
+#     UPDATED: To maintain consistency with LinearRegression.py, the returned objects are
+#     only the relevant arrays: one with the peak maximum, one with the peak position 
 
-    """
-    Applies the 'PrevWeek' method to obtain peak positions and peak values.
-    It is applied to a Data Frame containing the data for a single meter.
-    It returns a copy of the initial data frame, with two extra columns:
+#     - "PrevWeek Peak Value": the predicted value via PrevWeek
+#     - "PrevWeek Peak Position": the predicted value via PrevWeek
+#     """
 
-    - "PrevWeek Peak Value": the predicted value via PrevWeek
-    - "PrevWeek Peak Position": the predicted value via PrevWeek
-    """
+#     dropped_data = meter_data.drop(columns=["Peak Value", "Peak Position"])
 
-    size = feature_matrix.shape[0]
-    peak_value_array = np.zeros(size)
-    peak_position_array = np.zeros(size)
+#     meter_data["PrevWeek Peak Value"] = dropped_data.apply(np.max, axis=1) # Axis 1: max per each row
+#     meter_data["PrevWeek Peak Position"] = dropped_data.apply(np.argmax, axis=1) 
 
-    for i in range(size):
+#     #return meter_data
 
-        week_values = feature_matrix[i, 0:7]
-        peak_value = np.max(week_values)
-        peak_position = np.argmax(week_values) % 7
+#     peak_value = meter_data["PrevWeek Peak Value"].values
+#     peak_position = meter_data["PrevWeek Peak Position"].values
 
-        peak_value_array[i] = peak_value
-        peak_position_array[i] = peak_position
+#     return peak_value, peak_position
 
-    return peak_value_array, peak_position_array
+# # Roberto
+# def prev_week_array(feature_matrix):
 
-data_cool = read_data("ProcessedDataTest")
+#     """
+#     Applies the 'PrevWeek' method to obtain peak positions and peak values.
+#     It is applied to a Data Frame containing the data for a single meter.
+#     It returns a copy of the initial data frame, with two extra columns:
+
+#     - "PrevWeek Peak Value": the predicted value via PrevWeek
+#     - "PrevWeek Peak Position": the predicted value via PrevWeek
+#     """
+
+#     size = feature_matrix.shape[0]
+#     peak_value_array = np.zeros(size)
+#     peak_position_array = np.zeros(size)
+
+#     for i in range(size):
+
+#         week_values = feature_matrix[i, 0:7]
+#         peak_value = np.max(week_values)
+#         peak_position = np.argmax(week_values) % 7
+
+#         peak_value_array[i] = peak_value
+#         peak_position_array[i] = peak_position
+
+#     return peak_value_array, peak_position_array
+
+# data_cool = read_data("ProcessedDataTest")
 
 def get_folds(data,nSplits):
 
