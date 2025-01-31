@@ -8,7 +8,11 @@ from PrepareData import read_data, prev_week_DataFrame,get_folds
 from LinearRegression import linregress_meter, linregress_global
 from XGBoost import XgBoost_global,XgBoost
 from xgboost import XGBRegressor, XGBClassifier
+<<<<<<< HEAD
 from sklearn.linear_model import LinearRegression
+=======
+from sklearn.preprocessing import OneHotEncoder
+>>>>>>> 204b92c648bfeb41d9183076c734199314bb16df
 
 
 from pdb import set_trace
@@ -199,16 +203,36 @@ def main():
         data_train = pd.concat(data_train, axis=0, ignore_index=True)
         data_test = pd.concat(testData, axis=0, ignore_index=True)
 
+        #convert to categorical data
+        data_train["Peak Position"] = data_train["Peak Position"].astype("category")
+        data_test["Peak Position"] = data_test["Peak Position"].astype("category")
+
         y_train = data_train["Peak Position"].values
         X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
 
         y_test = data_test["Peak Position"].values
         X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
 
+
+        # one-hot encode the target variable
+        #encoder = OneHotEncoder(sparse_output=False)
+        #y_train_encoded = encoder.fit_transform(y_train.reshape(-1, 1))
+        #y_test_encoded = encoder.transform(y_test.reshape(-1, 1))
+        #print(y_train_encoded[0])
+        #print(y_test_encoded[0])
+
+
         model = XGBClassifier( max_depth = params['max_depth'][0], min_child_weight = params['min_child_weight'][0],
                               learning_rate = params['learning_rate'][0], subsample = params['subsample'][0],colsample_bytree = params['colsample_bytree'][0],
+<<<<<<< HEAD
                               reg_lambda = params['reg_lambda'][0],gamma = params['gamma'][0],random_state=42, tree_method = 'approx', objective='multi:softmax')
+=======
+                              reg_alpha = params['reg_alpha'][0],reg_lambda = params['reg_lambda'][0],random_state=params['random_state'], enable_categorical=True, # this will use XGBoost's internal voodoo to deal with categorical data
+                                device="gpu") #remove or change to "cpu" if it's not working
+>>>>>>> 204b92c648bfeb41d9183076c734199314bb16df
 
+        # default params for testing
+        #model = XGBClassifier(enable_categorical=True, device="gpu" )
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
