@@ -8,6 +8,7 @@ from PrepareData import read_data, prev_week_DataFrame,get_folds
 from LinearRegression import linregress_meter, linregress_global
 from XGBoost import XgBoost_global,XgBoost
 from xgboost import XGBRegressor, XGBClassifier
+from sklearn.linear_model import LinearRegression
 
 
 from pdb import set_trace
@@ -186,7 +187,7 @@ def main():
 
         model = XGBRegressor( max_depth = params['max_depth'][0], min_child_weight = params['min_child_weight'][0],
                               learning_rate = params['learning_rate'][0], subsample = params['subsample'][0],colsample_bytree = params['colsample_bytree'][0],
-                              reg_alpha = params['reg_alpha'][0],reg_lambda = params['reg_lambda'][0],random_state=params['random_state'])
+                              reg_lambda = params['reg_lambda'][0],gamma = params['gamma'][0],random_state=42, tree_method = 'approx')
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
@@ -206,14 +207,14 @@ def main():
 
         model = XGBClassifier( max_depth = params['max_depth'][0], min_child_weight = params['min_child_weight'][0],
                               learning_rate = params['learning_rate'][0], subsample = params['subsample'][0],colsample_bytree = params['colsample_bytree'][0],
-                              reg_alpha = params['reg_alpha'][0],reg_lambda = params['reg_lambda'][0],random_state=params['random_state'])
+                              reg_lambda = params['reg_lambda'][0],gamma = params['gamma'][0],random_state=42, tree_method = 'approx', objective='multi:softmax')
 
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
         return y_pred, y_test
 
-    def xgBoost_cv(whichTask):
+    def xgBoost_cv_hyp_search(whichTask):
 
 
 
@@ -231,9 +232,8 @@ def main():
                     'learning_rate': 0,
                     'subsample': 0,
                     'colsample_bytree': 0,
-                    'reg_alpha': 0,
                     'reg_lambda': 0,
-                    'random_state': 42
+                    'gamma': 0
                     }
 
 
@@ -242,14 +242,13 @@ def main():
 
             for i in range(maxIter):
                 print(i)
-                search_space = {'max_depth': np.random.randint(1, 11, 1),
+                search_space = {'max_depth': np.random.randint(3, 8, 1),
                         'min_child_weight': np.random.uniform(0, 10, 1),
-                        'learning_rate': np.random.uniform(0, 1, 1),
-                        'subsample': np.random.uniform(0.1, 1, 1),
+                        'learning_rate': np.random.uniform(0, 0.35, 1),
+                        'subsample': np.random.uniform(0.1, 0.6, 1),
                         'colsample_bytree': np.random.uniform(0.1, 1, 1),
-                        'reg_alpha': np.random.uniform(0, 5, 1),
-                        'reg_lambda': np.random.uniform(0, 5, 1),
-                        'random_state': 42
+                        'reg_lambda': np.random.uniform(0, 3, 1),
+                        'gamma': np.random.uniform(0, 3, 1)
                         }
 
                 rmse_results = []
@@ -277,15 +276,14 @@ def main():
 
             for i in range(maxIter):
                 print(i)
-                search_space = {'max_depth': np.random.randint(1, 11, 1),
-                            'min_child_weight': np.random.uniform(0, 10, 1),
-                            'learning_rate': np.random.uniform(0, 1, 1),
-                            'subsample': np.random.uniform(0.1, 1, 1),
-                            'colsample_bytree': np.random.uniform(0.1, 1, 1),
-                            'reg_alpha': np.random.uniform(0, 5, 1),
-                            'reg_lambda': np.random.uniform(0, 5, 1),
-                            'random_state': 42
-                            }
+                search_space = {'max_depth': np.random.randint(3, 8, 1),
+                                'min_child_weight': np.random.uniform(0, 10, 1),
+                                'learning_rate': np.random.uniform(0, 0.35, 1),
+                                'subsample': np.random.uniform(0.1, 0.6, 1),
+                                'colsample_bytree': np.random.uniform(0.1, 1, 1),
+                                'reg_lambda': np.random.uniform(0, 3, 1),
+                                'gamma': np.random.uniform(0, 3, 1)
+                                }
 
                 accuracy_results = []
 
@@ -305,8 +303,31 @@ def main():
 
             return best_space, best_accuracy
 
-    print(xgBoost_cv('regression'))
-    print(xgBoost_cv('classification'))
+
+    def least_squares(data_train, testData):
+
+        data_train = pd.concat(data_train, axis=0, ignore_index=True)
+        data_test = pd.concat(testData, axis=0, ignore_index=True)
+
+        y_train = data_train["Peak Value"].values
+        X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
+
+        y_test = data_test["Peak Value"].values
+        X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
+
+        model = LinearRegression()
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        return y_pred, y_test
+
+
+    size = 0.8
+    #data_test = data[int(size * len(data)):]  # for final testing
+    #data_train = data[:int(size * len(data))]  # for cross validation
+    #print(xgBoost_cv_hyp_search('regression'))
+    print(xgBoost_cv_hyp_search('classification'))
+
 
 
 if __name__ == "__main__":
