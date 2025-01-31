@@ -1,8 +1,8 @@
-from xgboost import XGBRegressor
-import numpy as np
+from xgboost import XGBRegressor, XGBClassifier
 import pandas as pd
-
-from sklearn.metrics import root_mean_squared_error
+import numpy as np
+from PrepareData import get_folds
+from sklearn.metrics import root_mean_squared_error, accuracy_score
 
 ##### Code examples: Use XGBoost and plot #####
 
@@ -29,10 +29,23 @@ from sklearn.metrics import root_mean_squared_error
 
 ##### Main functions #####
 
-def XgBoost(data_train, testData,eta,max_depth):
+
+def XgBoost_regression(data_train, data_test, params):
+
+    """
+
+        This function applies XGBoost to the data for all users (globally) in the following way: data frames
+        are concatenated vertically, so essentially we mix all 9-tuples together. The format is the one returned by
+        construct_feature_matrix_DataFrame() (so after applying the sliding window, with 9-tuples as rows).
+
+        The return will be a tuple with:
+         - an array with the predicted values for the peak value.
+         - the true values to be predicted
+
+    """
 
     data_train = pd.concat(data_train, axis=0, ignore_index=True)
-    data_test = pd.concat(testData, axis=0, ignore_index=True)
+    data_test = pd.concat(data_test, axis=0, ignore_index=True)
 
     y_train = data_train["Peak Value"].values
     X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
@@ -40,66 +53,230 @@ def XgBoost(data_train, testData,eta,max_depth):
     y_test = data_test["Peak Value"].values
     X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
 
-    # Fit XGBoost
-    model = XGBRegressor(learning_rate = eta, max_depth = max_depth)  # specify paramters
+    model = XGBRegressor(max_depth=params['max_depth'][0], min_child_weight=params['min_child_weight'][0],
+                         learning_rate=params['learning_rate'][0], subsample=params['subsample'][0],
+                         colsample_bytree=params['colsample_bytree'][0],
+                         reg_lambda=params['reg_lambda'][0], gamma=params['gamma'][0], random_state=42,
+                         tree_method='approx')
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
     return y_pred, y_test
 
-def XgBoost_global(data_meters: list[pd.DataFrame],
-                   split_horizontal = False, 
-                   size = 0.8):
+def XgBoost_classifier(data_train, data_test, params):
 
     """
-    This function applies XGBoost to the data for all users (globally) in the following way: data frames
-    are concatenated vertically, so essentially we mix all 9-tuples together. The format is the one returned by 
-    construct_feature_matrix_DataFrame() (so after applying the sliding window, with 9-tuples as rows).
 
-    The return will be a tuple with:
-    - an array with the predicted values for the peak value.
-    - the true values to be predicted
+            This function applies XGBoost to the data for all users (globally) in the following way: data frames
+            are concatenated vertically, so essentially we mix all 9-tuples together. The format is the one returned by
+            construct_feature_matrix_DataFrame() (so after applying the sliding window, with 9-tuples as rows).
 
-    --- Other inputs:
+            The return will be a tuple with:
+             - an array with the predicted position the peak value.
+             - the true position's values to be predicted
 
-    split_horizontal = Boolean. If true, the function splits the data such that only on the first (size * len(data_meters)) **users**
-    are used for training (but with their whole time series). The rest of the users are used for predictions
+        """
 
-    size = Float. The fraction of users used for training the data
+    data_train = pd.concat(data_train, axis=0, ignore_index=True)
+    data_test = pd.concat(data_test, axis=0, ignore_index=True)
+
+    #convert to categorical data
+    data_train["Peak Position"] = data_train["Peak Position"].astype("category")
+    data_test["Peak Position"] = data_test["Peak Position"].astype("category")
+
+    y_train = data_train["Peak Position"].values
+    X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
+
+    y_test = data_test["Peak Position"].values
+    X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
+
+
+    # one-hot encode the target variable
+    #encoder = OneHotEncoder(sparse_output=False)
+    #y_train_encoded = encoder.fit_transform(y_train.reshape(-1, 1))
+    #y_test_encoded = encoder.transform(y_test.reshape(-1, 1))
+    #print(y_train_encoded[0])
+    #print(y_test_encoded[0])
+
+
+    model = XGBClassifier( max_depth = params['max_depth'][0], min_child_weight = params['min_child_weight'][0],
+                              learning_rate = params['learning_rate'][0], subsample = params['subsample'][0],colsample_bytree = params['colsample_bytree'][0],
+                              reg_lambda = params['reg_lambda'][0],gamma = params['gamma'][0],random_state=42, tree_method = 'approx', objective='multi:softmax')
+                              #reg_alpha = params['reg_alpha'][0],reg_lambda = params['reg_lambda'][0],random_state=params['random_state'], enable_categorical=True, # this will use XGBoost's internal voodoo to deal with categorical data
+                              #  device="gpu") #remove or change to "cpu" if it's not working
+
+    # default params for testing
+    #model = XGBClassifier(enable_categorical=True, device="gpu" )
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    return y_pred, y_test
+
+
+def xgBoost_cv_hyp_search(whichTask,data_train):
+
     """
 
-    if split_horizontal == False:
-        # Concatenate all in one DataFrame
-        data = pd.concat(data_meters, ignore_index=True, axis=0)
+        This function performs 3-fold cross validation on 'data' in order to search for the best paramters.
+        If whichTask is regression then it will perform CV using rmse
+        If whichTask is classification then it will perform CV using accuracy
+        They return the best set of paramters that minimizes the cost function and the latter value.
 
-        # Extract relevant values as arrays
-        y = data["Peak Value"].values
-        X = data.drop(columns=["Peak Value", "Peak Position"]).values
+    """
 
-        # Fit XGBoost
-        model = XGBRegressor() # specify paramters
-        model.fit(X, y)
-        y_pred = model.predict(X)
+    nSplits = 3
+    folds = get_folds(data_train,nSplits)
 
-        return y_pred, y
-    
-    else:
-        # Keep the first users only
-        data_train = pd.concat(data_meters[:int(size * len(data_meters))], axis=0, ignore_index=True)
-        data_test = pd.concat(data_meters[int(size * len(data_meters)):], axis=0, ignore_index=True)
+    maxIter = 100
 
-        # Extract relevant values as arrays
-        y_train = data_train["Peak Value"].values
-        X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
+    best_space = {'max_depth': 0,
+                    'min_child_weight': 0,
+                    'learning_rate': 0,
+                    'subsample': 0,
+                    'colsample_bytree': 0,
+                    'reg_lambda': 0,
+                    'gamma': 0
+                    }
 
-        y_test = data_test["Peak Value"].values
-        X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
 
-        # Fit XGBoost
-        model = XGBRegressor() # specify paramters
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+    if whichTask == 'regression':
+        best_rmse = 10000 # set a very high rmse such that then first paramters' guess will be accepted
 
-        return y_pred, y_test
+        for i in range(maxIter):
+            search_space = {'max_depth': np.random.randint(3, 8, 1),
+                        'min_child_weight': np.random.uniform(0, 10, 1),
+                        'learning_rate': np.random.uniform(0, 0.35, 1),
+                        'subsample': np.random.uniform(0.1, 0.6, 1),
+                        'colsample_bytree': np.random.uniform(0.1, 1, 1),
+                        'reg_lambda': np.random.uniform(0, 3, 1),
+                        'gamma': np.random.uniform(0, 3, 1)
+                        }
+
+            rmse_results = []
+
+            for k in range(nSplits):
+                train_data = folds[0][k]
+                test_data = folds[1][k]
+
+                y_pred, y_true = XgBoost_regression(train_data, test_data,search_space )
+
+                rmse_results.append(root_mean_squared_error(y_true, y_pred))
+
+                avg_rmse = np.mean(rmse_results)
+
+            if avg_rmse < best_rmse: # if the average is lower than the best_rmse then we have found a new best set of paramters
+
+                best_rmse = avg_rmse
+                best_space = search_space
+
+        return best_space, best_rmse
+
+    if whichTask == 'classification':
+
+        best_accuracy = -1 # set an accuracy smaller than 0 such that then first paramters' guess will be accepted
+
+        for i in range(maxIter):
+            search_space = {'max_depth': np.random.randint(3, 8, 1),
+                                'min_child_weight': np.random.uniform(0, 10, 1),
+                                'learning_rate': np.random.uniform(0, 0.35, 1),
+                                'subsample': np.random.uniform(0.1, 0.6, 1),
+                                'colsample_bytree': np.random.uniform(0.1, 1, 1),
+                                'reg_lambda': np.random.uniform(0, 3, 1),
+                                'gamma': np.random.uniform(0, 3, 1)
+                                }
+
+            accuracy_results = []
+
+            for k in range(nSplits):
+                train_data = folds[0][k]
+                test_data = folds[1][k]
+
+                y_pred, y_true = XgBoost_classifier(train_data, test_data, search_space)
+
+                accuracy_results.append(accuracy_score(y_true, y_pred))
+
+                avg_accuracy = np.mean(accuracy_results)
+
+            if avg_accuracy > best_accuracy: # if the average is higher than the best_accuracy then we have found a new best set of paramters
+                best_accuracy = avg_accuracy
+                best_space = search_space
+
+        return best_space, best_accuracy
+
+
+
+
+# def XgBoost(data_train, testData,eta,max_depth):
+#
+#     data_train = pd.concat(data_train, axis=0, ignore_index=True)
+#     data_test = pd.concat(testData, axis=0, ignore_index=True)
+#
+#     y_train = data_train["Peak Value"].values
+#     X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
+#
+#     y_test = data_test["Peak Value"].values
+#     X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
+#
+#     # Fit XGBoost
+#     model = XGBRegressor(learning_rate = eta, max_depth = max_depth)  # specify paramters
+#     model.fit(X_train, y_train)
+#     y_pred = model.predict(X_test)
+#
+#     return y_pred, y_test
+
+# def XgBoost_global(data_meters: list[pd.DataFrame],
+#                    split_horizontal = False,
+#                    size = 0.8):
+#
+#     """
+#     This function applies XGBoost to the data for all users (globally) in the following way: data frames
+#     are concatenated vertically, so essentially we mix all 9-tuples together. The format is the one returned by
+#     construct_feature_matrix_DataFrame() (so after applying the sliding window, with 9-tuples as rows).
+#
+#     The return will be a tuple with:
+#     - an array with the predicted values for the peak value.
+#     - the true values to be predicted
+#
+#     --- Other inputs:
+#
+#     split_horizontal = Boolean. If true, the function splits the data such that only on the first (size * len(data_meters)) **users**
+#     are used for training (but with their whole time series). The rest of the users are used for predictions
+#
+#     size = Float. The fraction of users used for training the data
+#     """
+#
+#     if split_horizontal == False:
+#         # Concatenate all in one DataFrame
+#         data = pd.concat(data_meters, ignore_index=True, axis=0)
+#
+#         # Extract relevant values as arrays
+#         y = data["Peak Value"].values
+#         X = data.drop(columns=["Peak Value", "Peak Position"]).values
+#
+#         # Fit XGBoost
+#         model = XGBRegressor() # specify paramters
+#         model.fit(X, y)
+#         y_pred = model.predict(X)
+#
+#         return y_pred, y
+#
+#     else:
+#         # Keep the first users only
+#         data_train = pd.concat(data_meters[:int(size * len(data_meters))], axis=0, ignore_index=True)
+#         data_test = pd.concat(data_meters[int(size * len(data_meters)):], axis=0, ignore_index=True)
+#
+#         # Extract relevant values as arrays
+#         y_train = data_train["Peak Value"].values
+#         X_train = data_train.drop(columns=["Peak Value", "Peak Position"]).values
+#
+#         y_test = data_test["Peak Value"].values
+#         X_test = data_test.drop(columns=["Peak Value", "Peak Position"]).values
+#
+#         # Fit XGBoost
+#         model = XGBRegressor() # specify paramters
+#         model.fit(X_train, y_train)
+#         y_pred = model.predict(X_test)
+#
+#         return y_pred, y_test
 
 
