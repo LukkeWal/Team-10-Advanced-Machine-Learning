@@ -12,6 +12,27 @@ from sklearn.preprocessing import OneHotEncoder
 
 from pdb import set_trace
 
+# our best parameters
+best_regression_params = {
+    'max_depth': [7],
+    'min_child_weight': [6.48687005],
+    'learning_rate': [0.09914108],
+    'subsample': [0.50536943],
+    'colsample_bytree': [0.70956684],
+    'reg_lambda': [2.52174128],
+    'gamma': [1.51326692]
+    }
+    
+best_classification_params = {
+    'max_depth': [7],
+    'min_child_weight': [6.35119954],
+    'learning_rate': [0.05147735],
+    'subsample': [0.58568049],
+    'colsample_bytree': [0.89649074],
+    'reg_lambda': [2.30147386],
+    'gamma': [0.73406308]
+    }
+
 def main():
     
     ##### LOAD THE DATA #####
